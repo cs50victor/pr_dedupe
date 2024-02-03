@@ -1,0 +1,23 @@
+[package]
+name = "pr_dedupe"
+description = "finds duplicate or similar pull requests"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.67"
+
+[dependencies]
+anyhow = "1.0.79"
+async-trait = "0.1.77"
+candle-core = { version = "0.3.3", features = ["metal"] }
+candle-nn = { version = "0.3.3", features = ["metal"] }
+candle-transformers = { version = "0.3.3", features = ["metal"] }
+futures = "0.3.30"
+hf-hub = { version = "0.3.2", features = ["tokio"] }
+log = "0.4.20"
+postgrest = "1.6.0"
+rayon = "1.8.1"
+reqwest = "0.11.24"
+serde_json = "1.0.113"
+text-splitter = "0.6.3"
+tokenizers = { version = "0.15.1" }
+tokio = { version = "1.36.0", features = ["full"] }
