@@ -142,13 +142,17 @@ impl Bert {
 
     /// Builds the model and tokenizer.
     pub async fn build_model_and_tokenizer(mut self) -> Result<Self> {
-        let device = match Device::new_metal(0) {
-            Ok(device) => device,
-            Err(_) => {
-                log::error!("Couldn't use Metal as default device, defaulting to CPU");
-                Device::Cpu
-            }
-        };
+        // currently errors out "Metal error WouldBlock" fix later
+
+        // let device = match Device::new_metal(0) {
+        //     Ok(device) => device,
+        //     Err(e) => {
+        //         log::error!("Couldn't use Metal as default device, defaulting to CPU | {e}");
+        //         Device::Cpu
+        //     }
+        // };
+
+        let device = Device::Cpu;
 
         let repo = Repo::with_revision(
             self.model_id.clone().unwrap(),
