@@ -1,4 +1,4 @@
-// Credit : https://github.com/scrippt-tech/orca
+// Derived from https://github.com/scrippt-tech/orca
 
 use anyhow::{anyhow, Error as E, Result};
 use candle_core::{Device, Tensor};
@@ -145,7 +145,7 @@ impl Bert {
 
         let repo = Repo::with_revision(self.model_id.clone().unwrap(), RepoType::Model, self.revision.clone().unwrap());
 
-        // 
+        //
         let (config_filename, tokenizer_filename, weights_filename) = if self.offline {
             let cache = Cache::default().repo(repo);
             (
@@ -242,19 +242,19 @@ impl Embedding for Bert {
     }
 }
 
-pub async fn generate_embeddings(content: &str, max_token: usize) -> Result<Vec<f32>>{
+pub async fn generate_embeddings(content: &str, max_tokens: usize) -> Result<Vec<f32>>{
     let bert = Bert::new().build_model_and_tokenizer().await?;
 
-    let chunked_pr_content = chunk_large_text(content, max_token);
+    // chunk input text
+    // use huggingface tokenizer for text splitter?
+    // text_splitter::TextSplitter::new(bert.tokenizer.unwrap().borrow().into());
+    let splitter = text_splitter::TextSplitter::default().with_trim_chunks(true);
+    
+    let chunked_pr_content = splitter.chunks(content, max_tokens).collect::<Vec<&str>>();
 
     Ok(bert.generate_embeddings(chunked_pr_content).await.unwrap().to_vec().unwrap())
 }
 
-fn chunk_large_text(content:&str, max_tokens: usize, ) -> Vec<&str> {
-    // use huggingface tokenizer for text splitter?
-    let splitter = text_splitter::TextSplitter::default().with_trim_chunks(true);
-    splitter.chunks(content, max_tokens).collect::<Vec<&str>>()
-}
 
 #[cfg(test)]
 mod test {

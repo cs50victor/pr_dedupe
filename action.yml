@@ -4,7 +4,7 @@ author: Victor A. <52110451+cs50victor@users.noreply.github.com>
 inputs:
   min_similarity:
     description: 'Minimum similarity to check for (i.e display all PRs that are 80% > similar )'
-    required: true
+    required: false
     default: ''
   token:
     description: 'The GitHub token to use for downloading the action, defaults to workflow token'
