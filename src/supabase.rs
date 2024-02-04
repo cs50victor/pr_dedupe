@@ -4,7 +4,7 @@ use serde_json::json;
 // add later
 
 struct SB {
-    client: Postgrest
+    client: Postgrest,
 }
 
 impl SB {
@@ -12,26 +12,29 @@ impl SB {
     where
         T: Into<String>,
     {
-        Self { 
-            client: Postgrest::new(supabase_url).insert_header("apikey", supabase_service_role_key)
-            // TODO: add later 
-            // {
-            //     auth: {
-            //       persistSession: false,
-            //       autoRefreshToken: false,
-            //     },
-            //   }
+        Self {
+            client: Postgrest::new(supabase_url).insert_header("apikey", supabase_service_role_key), // TODO: add later
+                                                                                                     // {
+                                                                                                     //     auth: {
+                                                                                                     //       persistSession: false,
+                                                                                                     //       autoRefreshToken: false,
+                                                                                                     //     },
+                                                                                                     //   }
         }
     }
 
-    pub async fn save_embedding(&self, embedding: Vec<f32>){
+    pub async fn save_embedding(&self, embedding: Vec<f32>) {
         let body = json!({
             "pr_num": "pr_num",
             "name": "repo_name",
             "embedding": embedding
         });
-        
-        let resp = self.client.from("repos").upsert(body.to_string()).execute().await;
-        
+
+        let _resp = self
+            .client
+            .from("repos")
+            .upsert(body.to_string())
+            .execute()
+            .await;
     }
 }

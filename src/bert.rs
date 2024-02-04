@@ -6,7 +6,10 @@ use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use hf_hub::{api::tokio::Api, Cache, Repo, RepoType};
 use rayon::prelude::*;
-use std::{fmt::Display, sync::{Arc, Mutex}};
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 use tokenizers::{PaddingParams, Tokenizer};
 use tokio::sync::RwLock;
 
@@ -42,7 +45,9 @@ impl EmbeddingResponse {
                     ))),
                 }
             }
-            EmbeddingResponse::Empty => Err(anyhow::anyhow!("empty response does not have an embedding")),
+            EmbeddingResponse::Empty => {
+                Err(anyhow::anyhow!("empty response does not have an embedding"))
+            }
         }
     }
 
@@ -57,7 +62,9 @@ impl EmbeddingResponse {
 
                 Ok(embedding.clone())
             }
-            EmbeddingResponse::Empty => Err(anyhow::anyhow!("empty response does not have an embedding")),
+            EmbeddingResponse::Empty => {
+                Err(anyhow::anyhow!("empty response does not have an embedding"))
+            }
         }
     }
 
@@ -135,23 +142,33 @@ impl Bert {
 
     /// Builds the model and tokenizer.
     pub async fn build_model_and_tokenizer(mut self) -> Result<Self> {
-        let device = match Device::new_metal(0){
+        let device = match Device::new_metal(0) {
             Ok(device) => device,
             Err(_) => {
                 log::error!("Couldn't use Metal as default device, defaulting to CPU");
                 Device::Cpu
-            },
+            }
         };
 
-        let repo = Repo::with_revision(self.model_id.clone().unwrap(), RepoType::Model, self.revision.clone().unwrap());
+        let repo = Repo::with_revision(
+            self.model_id.clone().unwrap(),
+            RepoType::Model,
+            self.revision.clone().unwrap(),
+        );
 
         //
         let (config_filename, tokenizer_filename, weights_filename) = if self.offline {
             let cache = Cache::default().repo(repo);
             (
-                cache.get("config.json").ok_or(anyhow!("Missing config file in cache"))?,
-                cache.get("tokenizer.json").ok_or(anyhow!("Missing tokenizer file in cache"))?,
-                cache.get("model.safetensors").ok_or(anyhow!("Missing weights file in cache"))?,
+                cache
+                    .get("config.json")
+                    .ok_or(anyhow!("Missing config file in cache"))?,
+                cache
+                    .get("tokenizer.json")
+                    .ok_or(anyhow!("Missing tokenizer file in cache"))?,
+                cache
+                    .get("model.safetensors")
+                    .ok_or(anyhow!("Missing weights file in cache"))?,
             )
         } else {
             let api = Api::new()?;
@@ -166,7 +183,8 @@ impl Bert {
         let config: Config = serde_json::from_str(&config)?;
         let tokenizer = Tokenizer::from_file(tokenizer_filename).map_err(E::msg)?;
 
-        let vb = unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[weights_filename], DTYPE, &device)? };
         let model = BertModel::load(vb, &config)?;
         self.model = Some(Arc::new(model));
         self.tokenizer = Some(RwLock::new(tokenizer));
@@ -177,7 +195,6 @@ impl Bert {
 #[async_trait::async_trait]
 impl Embedding for Bert {
     async fn generate_embeddings(&self, prompts: Vec<&str>) -> Result<EmbeddingResponse> {
-
         if self.model.is_none() || self.tokenizer.is_none() {
             return Err(anyhow!("Model or tokenizer not initialized"));
         }
@@ -197,9 +214,7 @@ impl Embedding for Bert {
             tokenizer.with_padding(Some(pp));
         }
 
-        let tokens = tokenizer
-            .encode_batch(prompts, true)
-            .map_err(E::msg)?;
+        let tokens = tokenizer.encode_batch(prompts, true).map_err(E::msg)?;
         let token_ids = tokens
             .iter()
             .enumerate()
@@ -210,23 +225,29 @@ impl Embedding for Bert {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let embeddings = vec![Tensor::ones((2, 3), candle_core::DType::F32, device)?; token_ids.len()];
+        let embeddings =
+            vec![Tensor::ones((2, 3), candle_core::DType::F32, device)?; token_ids.len()];
         // Wrap the embeddings vector in an Arc<Mutex<_>> for thread-safe access
         let embeddings_arc = Arc::new(Mutex::new(embeddings));
 
         // Use rayon to compute embeddings in parallel
         log::info!("Computing embeddings");
         let start = std::time::Instant::now();
-        token_ids.par_iter().try_for_each_with(embeddings_arc.clone(), |embeddings_arc, (i, token_ids)| {
-            let token_type_ids = token_ids.zeros_like()?;
-            let embedding = model.forward(token_ids, &token_type_ids)?.squeeze(0)?;
+        token_ids.par_iter().try_for_each_with(
+            embeddings_arc.clone(),
+            |embeddings_arc, (i, token_ids)| {
+                let token_type_ids = token_ids.zeros_like()?;
+                let embedding = model.forward(token_ids, &token_type_ids)?.squeeze(0)?;
 
-            // Lock the mutex and write the embedding to the correct index
-            let mut embeddings = embeddings_arc.lock().map_err(|e| anyhow!("Mutex error: {}", e))?;
-            embeddings[*i] = embedding;
+                // Lock the mutex and write the embedding to the correct index
+                let mut embeddings = embeddings_arc
+                    .lock()
+                    .map_err(|e| anyhow!("Mutex error: {}", e))?;
+                embeddings[*i] = embedding;
 
-            Ok::<(), anyhow::Error>(())
-        })?;
+                Ok::<(), anyhow::Error>(())
+            },
+        )?;
         log::info!("Done computing embeddings");
         log::info!("Embeddings took {:?} to generate", start.elapsed());
 
@@ -242,19 +263,23 @@ impl Embedding for Bert {
     }
 }
 
-pub async fn generate_embeddings(content: &str, max_tokens: usize) -> Result<Vec<f32>>{
+pub async fn generate_embeddings(content: &str, max_tokens: usize) -> Result<Vec<f32>> {
     let bert = Bert::new().build_model_and_tokenizer().await?;
 
     // chunk input text
     // use huggingface tokenizer for text splitter?
     // text_splitter::TextSplitter::new(bert.tokenizer.unwrap().borrow().into());
     let splitter = text_splitter::TextSplitter::default().with_trim_chunks(true);
-    
+
     let chunked_pr_content = splitter.chunks(content, max_tokens).collect::<Vec<&str>>();
 
-    Ok(bert.generate_embeddings(chunked_pr_content).await.unwrap().to_vec().unwrap())
+    Ok(bert
+        .generate_embeddings(chunked_pr_content)
+        .await
+        .unwrap()
+        .to_vec()
+        .unwrap())
 }
-
 
 #[cfg(test)]
 mod test {
@@ -263,7 +288,9 @@ mod test {
     #[tokio::test]
     async fn test_batch() {
         let bert = Bert::new().build_model_and_tokenizer().await.unwrap();
-        let response = bert.generate_embeddings(["Hello World", "Goodbye World"].to_vec()).await;
+        let response = bert
+            .generate_embeddings(["Hello World", "Goodbye World"].to_vec())
+            .await;
         let response = response.unwrap();
         let vec = response.to_vec2().unwrap();
         assert_eq!(vec.len(), 2);
