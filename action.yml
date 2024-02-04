@@ -4,16 +4,24 @@ author: Victor A. <52110451+cs50victor@users.noreply.github.com>
 inputs:
   min_similarity:
     description: 'Minimum similarity to check for (i.e display all PRs that are 80% > similar )'
-    required: true
-    default: ''
+    required: false
+    default: 80
+  top_k:
+    description: 'Number of matching PRs to return'
+    required: false
+    default: 10
+  vector_db:
+    description: 'Name of the vector database to use. (currently support 'upstash')'
+    required: false
+    default: "upstash"
   token:
     description: 'The GitHub token to use for downloading the action, defaults to workflow token'
     required: true
     default: ${{ github.token }}
 outputs:
-  error:
-    description: 'The description of any error that occurred'
-    value: ${{ steps.run.outputs.error }}
+  similar_prs:
+    description: 'Stringified json containing a list of similar PRs'
+    value: ${{ steps.run.outputs.similar_prs }}
 
 runs:
   using: 'composite'
@@ -50,7 +58,19 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
 
+    - name: Get All Changed Files
+      id: files
+      uses: jitterbit/get-changed-files@v1
+      with:
+        format: 'csv'
+
     - name: Run Action
       shell: bash
       id: run
-      run: ./${{ runner.os }}/${{ env.binary_name }} "${{ inputs.min_similarity }}"
+      run: ./${{ runner.os }}/${{ env.binary_name }} -m "${{ inputs.min_similarity }}" -k "${{ inputs.top_k }}" --db "${{ inputs.vector_db }}" --added "${{ steps.files.outputs.added }}" --modified "${{ steps.files.outputs.modified }}" --a-or-m "${{ steps.files.outputs.added_modified }}" --removed "${{ steps.files.outputs.removed }}" --renamed "${{ steps.files.outputs.removed }}"
+      env:
+        PR_NUMBER: ${{ github.event.number }}
+        REPO_NAME: ${{ github.repository }}
+
+
+
