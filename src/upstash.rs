@@ -1,3 +1,5 @@
+use std::env;
+
 use anyhow::Result;
 use reqwest::{header, Client, Response, Url};
 use serde_json::json;
@@ -29,10 +31,10 @@ impl Upstash {
         )
     }
 
-    pub async fn save_embedding(&self,embedding: &Vec<f32>, repo_name:String, pr_number:u16) -> Result<Response> {
-        
+    pub async fn save_embedding(&self,embedding: &Vec<f32>) -> Result<Response> {
+        let (repo_name, pr_number) = (env::var("REPO_NAME")?,env::var("PR_NUMBER")?);
         let data = json!({
-            "id": uuid(repo_name,pr_number), 
+            "id": uuid(&repo_name,&pr_number), 
             "vector": embedding,
         });
 
@@ -43,9 +45,9 @@ impl Upstash {
         Ok(resp)
     }
 
-    pub async fn query(&self, embedding: &Vec<f32>) -> Result<Response>{
+    pub async fn query(&self, embedding: &Vec<f32>, top_k: u8) -> Result<Response>{
         let data = json!({
-            "topK": 10,
+            "topK": top_k,
             "vector": &embedding,
             "includeVectors": false, 
             "includeMetadata": false
@@ -60,6 +62,6 @@ impl Upstash {
 
 }
 
-fn uuid(repo_name:String, pr_number: u16) -> String {
+fn uuid(repo_name: &str, pr_number: &str) -> String {
     format!("[{repo_name}]:{pr_number}")
 }

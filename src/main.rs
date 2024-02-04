@@ -7,6 +7,7 @@ use std::{env, process::exit};
 use futures::stream::StreamExt;
 use serde_json::json;
 use upstash::Upstash;
+use clap::Parser;
 
 #[derive(Clone, Copy)]
 enum FileAction {
@@ -29,28 +30,77 @@ impl From<FileAction> for char {
     }
 }
 
+#[derive(Parser, Debug)]
+#[command(about = "finds duplicate or similar prs in a repo", long_about = None)]
+struct Args {
+    #[arg(long="added")]
+    added_files: String,
+    
+    #[arg(long="modified")]
+    modified_files: String,
+    
+    #[arg(long="a-or-m")]
+    added_or_modified_files: String,
+    
+    #[arg(long="removed")]
+    removed_files: String,
+    
+    #[arg(long="renamed")]
+    renamed_files: String,
+    
+    #[arg(long="db", default_value="upstash")]
+    vector_db: String,
+
+    /// Number similar matches to return
+    #[arg(short='k', default_value_t = 10)]
+    top_k: u8,
+    
+    /// Minimum similarity, in percentage to match for
+    #[arg(short='m', default_value_t = 80)]
+    min_similarity: u8,
+}
+
 #[tokio::main]
 async fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let (min_similarity, added_files, modified_files, added_or_modified_files, removed_files, renamed_files) = (&args[1].as_str(), args[2].as_str(), args[3].as_str(), args[4].as_str(), args[5].as_str(),args[6].as_str());
-    let (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) = (env::var("SUPABASE_URL"),env::var("SUPABASE_SERVICE_ROLE_KEY"));
-
-    if !(SUPABASE_URL.is_ok() && SUPABASE_SERVICE_ROLE_KEY.is_ok()){    
-        log_error("both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env variables need to be set to use this Github Action".to_string());
-        exit(1);
-    }
+    let args = Args::parse();
     
-    let (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) = (SUPABASE_URL.unwrap(), SUPABASE_SERVICE_ROLE_KEY.unwrap());
+    let Args {min_similarity: _, added_files, modified_files, added_or_modified_files, removed_files, renamed_files, top_k, vector_db} = args;
 
-    if !&min_similarity.is_empty() {
-        log_error(min_similarity);
-        exit(1);
-    }
+    if ![&added_files, &modified_files, &added_or_modified_files, &removed_files, &renamed_files].iter().any(|arg| !arg.is_empty()) {
+        return
+    };
 
-    let pr_files = added_files.split(',').map(|file| (file, FileAction::Added))
-                        .chain(modified_files.split(',').map(|file| (file, FileAction::Modified)))
-                        .chain(added_or_modified_files.split(',').map(|file| (file, FileAction::AddedModified)));
+    let (rest_url, token) = match vector_db.as_str() {
+        "supabase" => {
+            let (supabase_url, supabase_service_role_key) = (env::var("SUPABASE_URL"),env::var("SUPABASE_SERVICE_ROLE_KEY"));
+        
+            if supabase_url.is_err() || supabase_service_role_key.is_err(){    
+                eprintln!("both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env variables need to be set to use supabase's vector database");
+                exit(1);
+            }
+            
+            (supabase_url.unwrap(), supabase_service_role_key.unwrap())
+        }
+        "upstash" => {
+            let (upstash_vector_rest_url, upstash_vector_rest_token) = (env::var("UPSTASH_VECTOR_REST_URL"),env::var("UPSTASH_VECTOR_REST_TOKEN"));
+        
+            if upstash_vector_rest_url.is_err() || upstash_vector_rest_token.is_err() {    
+                eprintln!("both UPSTASH_VECTOR_REST_URL and UPSTASH_VECTOR_REST_TOKEN env variables need to be set to use supabase's vector database");
+                exit(1);
+            }
+            
+            (upstash_vector_rest_url.unwrap(), upstash_vector_rest_token.unwrap())
+        }
+        _ =>{
+            eprintln!("Unsupported vector database name. Supported names are 'supabase', 'upstash' ");
+            exit(1);
+        }
+    };
+    
 
+    let mut pr_files = added_files.split(',').map(|file| (file, FileAction::Added))
+                                                          .chain(modified_files.split(',').map(|file| (file, FileAction::Modified)))
+                                                          .chain(added_or_modified_files.split(',').map(|file| (file, FileAction::AddedModified)));
 
     let mut pr_content = futures::stream::iter(
         pr_files.map(|(path, file_type)| {
@@ -67,19 +117,19 @@ async fn main() {
                                     },
                                     _ => {
                                         let symbol : char = file_type.into();
-                                        log_error(format!("Unexpected Filetype. Symbol {symbol}"));
+                                        eprintln!("Unexpected Filetype. Symbol {symbol}");
                                         "".to_owned()
                                     },
                                 }
                             }
                             Err(e) => {
-                                log_error(e.to_string());
+                                eprintln!("{e}");
                                 "".to_owned()
                             },
                         }
                     }
                     Err(e) => {
-                        log_error(format!("Couldn't download {path} | Reason {e:?}"));
+                        eprintln!("Couldn't download {path} | Reason {e:?}");
                         "".to_owned()
                     },
                 }
@@ -93,36 +143,31 @@ async fn main() {
     let embedding = match bert::generate_embeddings(&pr_content.join(" "), 399).await{
         Ok(embedding) => embedding,
         Err(e) =>{
-            log_error(e.to_string());
+            eprintln!("Error: {e}");
             exit(1);
         }
     };
     
-    let db_client = match Upstash::new(){
+    let db_client = match Upstash::new(rest_url, token){
         Ok(db_client) => db_client,
         Err(e) => {
-            log_error(e.to_string());
+            eprintln!("Error: {e}");
             exit(1);
         }
     };
 
-    if let Err(e)= db_client.save_embedding(&embedding, repo_name, pr_number).await{
-        log_error(e.to_string());
+    if let Err(e)= db_client.save_embedding(&embedding).await{
+        eprintln!("Error: {e}");
         exit(1);
     };
     
-    let c = db_client.query(&embedding).await;
+    let c = db_client.query(&embedding, top_k).await;
     // check for similar PRs
 
     // output a json of similar prs
+    let similar_prs = json!({"smi":""}).to_string();
+    std::fs::write(env::var("GITHUB_OUTPUT").unwrap(), format!("similar_prs={similar_prs}")).unwrap();
     
-}
-
-fn log_error(err_msg: impl AsRef<str>){
-    let github_output = env::var("GITHUB_OUTPUT").unwrap();
-    let err_msg = err_msg.as_ref();
-    eprintln!("Error: {err_msg}");
-    std::fs::write(github_output, format!("error={err_msg}")).unwrap();
 }
 
 fn parse(file_type:FileAction, path:&str, content: Option<&str>) -> String {
@@ -132,3 +177,4 @@ fn parse(file_type:FileAction, path:&str, content: Option<&str>) -> String {
         None => format!("{symbol} : {path}\n"),
     }
 }
+
