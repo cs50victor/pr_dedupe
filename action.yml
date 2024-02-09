@@ -11,7 +11,7 @@ inputs:
     required: false
     default: 10
   vector_db:
-    description: 'Name of the vector database to use. (currently support 'upstash')'
+    description: "Name of the vector database to use. (currently support 'upstash')"
     required: false
     default: "upstash"
   token:
