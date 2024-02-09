@@ -176,12 +176,12 @@ async fn main() {
     pr_content.extend(
         removed_files
             .split(',')
-            .map(|file| parse(FileAction::Removed, file, None)),
-    );
-    pr_content.extend(
-        renamed_files
-            .split(',')
-            .map(|file| parse(FileAction::Renamed, file, None)),
+            .map(|file| parse(FileAction::Removed, file, None))
+            .chain(
+                renamed_files
+                    .split(',')
+                    .map(|file| parse(FileAction::Renamed, file, None)),
+            ),
     );
 
     let embedding = match bert::generate_embeddings(&pr_content.join(" "), 399).await {
