@@ -89,7 +89,11 @@ async fn main() {
         return;
     };
 
-    let raw_url_prefix = format!("https://github.com/{}/raw/{}/", env::var("REPO_NAME").unwrap(), env::var("GITHUB_SHA").unwrap());
+    let raw_url_prefix = format!(
+        "https://github.com/{}/raw/{}/",
+        env::var("REPO_NAME").unwrap(),
+        env::var("GITHUB_SHA").unwrap()
+    );
 
     let (rest_url, token) = match vector_db.as_str() {
         "supabase" => {
@@ -137,11 +141,12 @@ async fn main() {
                 .split(',')
                 .map(|file| (format!("{}/{file}", &raw_url_prefix), FileAction::Modified)),
         )
-        .chain(
-            added_or_modified_files
-                .split(',')
-                .map(|file| (format!("{}/{file}", &raw_url_prefix), FileAction::AddedModified)),
-        );
+        .chain(added_or_modified_files.split(',').map(|file| {
+            (
+                format!("{}/{file}", &raw_url_prefix),
+                FileAction::AddedModified,
+            )
+        }));
 
     let mut pr_content = futures::stream::iter(pr_files.map(|(path, file_type)| async move {
         match reqwest::get(&path).await {
@@ -178,12 +183,20 @@ async fn main() {
     pr_content.extend(
         removed_files
             .split(',')
-            .map(|file| parse(FileAction::Removed, &format!("{}/{file}", &raw_url_prefix), None))
-            .chain(
-                renamed_files
-                    .split(',')
-                    .map(|file| parse(FileAction::Renamed, &format!("{}/{file}", &raw_url_prefix), None)),
-            ),
+            .map(|file| {
+                parse(
+                    FileAction::Removed,
+                    &format!("{}/{file}", &raw_url_prefix),
+                    None,
+                )
+            })
+            .chain(renamed_files.split(',').map(|file| {
+                parse(
+                    FileAction::Renamed,
+                    &format!("{}/{file}", &raw_url_prefix),
+                    None,
+                )
+            })),
     );
 
     let embedding = match bert::generate_embeddings(&pr_content.join(" "), 399).await {
@@ -226,4 +239,3 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
         None => format!("{symbol} : {path}\n"),
     }
 }
-
