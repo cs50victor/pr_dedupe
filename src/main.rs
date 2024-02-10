@@ -1,4 +1,5 @@
 mod bert;
+mod files_to_ignore;
 mod supabase;
 mod upstash;
 
@@ -6,14 +7,28 @@ use std::{env, process::exit};
 
 use clap::Parser;
 use futures::stream::StreamExt;
-use serde_json::json;
+use log::{error, info};
+
+use serde::{Deserialize, Serialize};
 use upstash::Upstash;
 
-#[derive(Clone, Copy)]
+use crate::files_to_ignore::FILES_TO_IGNORE;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SimilarPRsInner {
+    pub pr_url:String,
+    pub percentage: f32
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SimilarPRs {
+    pub data: Vec<SimilarPRsInner>,
+}
+
+#[derive(Clone, Copy, Debug)]
 enum FileAction {
     Added,
     Modified,
-    AddedModified,
     Removed,
     Renamed,
 }
@@ -23,7 +38,6 @@ impl From<FileAction> for char {
         match val {
             FileAction::Added => '+',
             FileAction::Modified => 'M',
-            FileAction::AddedModified => '*',
             FileAction::Removed => '-',
             FileAction::Renamed => '^',
         }
@@ -38,9 +52,6 @@ struct Args {
 
     #[arg(long = "modified")]
     modified_files: String,
-
-    #[arg(long = "a-or-m")]
-    added_or_modified_files: String,
 
     #[arg(long = "removed")]
     removed_files: String,
@@ -62,14 +73,16 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    pretty_env_logger::formatted_builder()
+        .filter_module("pr_dedupe", log::LevelFilter::Info)
+        .init();
+
     let args = Args::parse();
 
     let Args {
         min_similarity: _,
         added_files,
         modified_files,
-        added_or_modified_files,
         removed_files,
         renamed_files,
         top_k,
@@ -79,7 +92,6 @@ async fn main() {
     if ![
         &added_files,
         &modified_files,
-        &added_or_modified_files,
         &removed_files,
         &renamed_files,
     ]
@@ -95,6 +107,8 @@ async fn main() {
         env::var("GITHUB_SHA").unwrap()
     );
 
+    info!("raw_url_prefix {}", &raw_url_prefix);
+
     let (rest_url, token) = match vector_db.as_str() {
         "supabase" => {
             let (supabase_url, supabase_service_role_key) = (
@@ -103,7 +117,7 @@ async fn main() {
             );
 
             if supabase_url.is_err() || supabase_service_role_key.is_err() {
-                eprintln!("both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env variables need to be set to use supabase's vector database");
+                error!("both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env variables need to be set to use supabase's vector database");
                 exit(1);
             }
 
@@ -116,7 +130,7 @@ async fn main() {
             );
 
             if upstash_vector_rest_url.is_err() || upstash_vector_rest_token.is_err() {
-                eprintln!("both UPSTASH_VECTOR_REST_URL and UPSTASH_VECTOR_REST_TOKEN env variables need to be set to use supabase's vector database");
+                error!("both UPSTASH_VECTOR_REST_URL and UPSTASH_VECTOR_REST_TOKEN env variables need to be set to use supabase's vector database");
                 exit(1);
             }
 
@@ -126,27 +140,28 @@ async fn main() {
             )
         }
         _ => {
-            eprintln!(
-                "Unsupported vector database name. Supported names are 'supabase', 'upstash' "
-            );
+            error!("Unsupported vector database name. Supported names are 'supabase', 'upstash' ");
             exit(1);
         }
     };
 
     let pr_files = added_files
         .split(',')
-        .map(|file| (format!("{}/{file}", &raw_url_prefix), FileAction::Added))
+        .map(|file| (file, FileAction::Added))
         .chain(
             modified_files
                 .split(',')
-                .map(|file| (format!("{}/{file}", &raw_url_prefix), FileAction::Modified)),
+                .map(|file| (file, FileAction::Modified)),
         )
-        .chain(added_or_modified_files.split(',').map(|file| {
-            (
-                format!("{}/{file}", &raw_url_prefix),
-                FileAction::AddedModified,
-            )
-        }));
+        .filter(|(file, _)| {
+            !file.is_empty() && !FILES_TO_IGNORE.iter().any(|&suffix| file.ends_with(suffix))
+        })
+        .map(|(file, action)| (format!("{}{file}", &raw_url_prefix), action));
+
+    info!(
+        "downloading PR files | {:?}",
+        pr_files.clone().collect::<Vec<_>>()
+    );
 
     let mut pr_content = futures::stream::iter(pr_files.map(|(path, file_type)| async move {
         match reqwest::get(&path).await {
@@ -155,23 +170,23 @@ async fn main() {
                     let content = std::str::from_utf8(&resp_bytes).unwrap();
 
                     match file_type {
-                        FileAction::Added | FileAction::Modified | FileAction::AddedModified => {
+                        FileAction::Added | FileAction::Modified => {
                             parse(file_type, &path, Some(content))
                         }
                         _ => {
                             let symbol: char = file_type.into();
-                            eprintln!("Unexpected Filetype. Symbol {symbol}");
+                            error!("Unexpected Filetype. Symbol {symbol}");
                             "".to_owned()
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("{e}");
+                    error!("{e}");
                     exit(1);
                 }
             },
             Err(e) => {
-                eprintln!("Couldn't download {path} | Reason {e:?}");
+                error!("Couldn't download {path} | Reason {e:?}");
                 exit(1);
             }
         }
@@ -183,26 +198,22 @@ async fn main() {
     pr_content.extend(
         removed_files
             .split(',')
-            .map(|file| {
-                parse(
-                    FileAction::Removed,
-                    &format!("{}/{file}", &raw_url_prefix),
-                    None,
-                )
-            })
-            .chain(renamed_files.split(',').map(|file| {
-                parse(
-                    FileAction::Renamed,
-                    &format!("{}/{file}", &raw_url_prefix),
-                    None,
-                )
-            })),
+            .map(|file| (file, FileAction::Removed))
+            .chain(
+                renamed_files
+                    .split(',')
+                    .map(|file| (file, FileAction::Renamed)),
+            )
+            .filter(|(file, _)| !file.is_empty())
+            .map(|(file, file_action)| {
+                parse(file_action, &format!("{}{file}", &raw_url_prefix), None)
+            }),
     );
 
-    let embedding = match bert::generate_embeddings(&pr_content.join(" "), 399).await {
+    let embedding = match bert::generate_embeddings(pr_content, 399).await {
         Ok(embedding) => embedding,
         Err(e) => {
-            eprintln!("Error: {e}");
+            error!("{e}");
             exit(1);
         }
     };
@@ -210,21 +221,32 @@ async fn main() {
     let db_client = match Upstash::new(rest_url, token) {
         Ok(db_client) => db_client,
         Err(e) => {
-            eprintln!("Error: {e}");
+            error!("{e}");
             exit(1);
         }
     };
 
+    info!("Created db client");
+
     if let Err(e) = db_client.save_embedding(&embedding).await {
-        eprintln!("Error: {e}");
+        error!("{e}");
         exit(1);
+    }
+
+    info!("Saved embedding");
+
+    let similar_prs = match db_client.query(&embedding, top_k).await {
+        Ok(resp) => serde_json::to_string(&resp).unwrap(),
+        Err(e) => {
+            error!("{e}");
+            exit(1);
+        }
     };
 
-    let _c = db_client.query(&embedding, top_k).await;
-    // check for similar PRs
+    info!("Queried for similar PRs");
 
-    // output a json of similar prs
-    let similar_prs = json!({"smi":""}).to_string();
+    info!("Similar PRs {similar_prs:?}");
+    // check for similar PRs
     std::fs::write(
         env::var("GITHUB_OUTPUT").unwrap(),
         format!("similar_prs={similar_prs}"),
@@ -235,7 +257,10 @@ async fn main() {
 fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
     let symbol: char = file_type.into();
     match content {
-        Some(c) => format!("{symbol} : {path}\n{c}\n"),
+        Some(c) => {
+            info!("parsed {path}'s content");
+            format!("{symbol} : {path}\n{c}\n")
+        }
         None => format!("{symbol} : {path}\n"),
     }
 }

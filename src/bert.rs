@@ -5,6 +5,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use hf_hub::{api::tokio::Api, Cache, Repo, RepoType};
+
 use rayon::prelude::*;
 use std::{
     fmt::Display,
@@ -18,13 +19,14 @@ pub trait Embedding {
     async fn generate_embeddings(&self, prompts: Vec<&str>) -> Result<EmbeddingResponse>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum EmbeddingResponse {
     /// Bert embedding response
     Bert(Tensor),
 
     /// Empty response; usually used to initialize a pipeline result when
     /// no response is available.
+    #[default]
     Empty,
 }
 
@@ -88,13 +90,6 @@ impl Display for EmbeddingResponse {
     }
 }
 
-impl Default for EmbeddingResponse {
-    /// Default EmbeddingResponse is Empty
-    fn default() -> Self {
-        EmbeddingResponse::Empty
-    }
-}
-
 pub struct Bert {
     /// Run offline (you must have the files already cached)
     offline: bool,
@@ -140,19 +135,25 @@ impl Bert {
         Self::default()
     }
 
-    /// Builds the model and tokenizer.
-    pub async fn build_model_and_tokenizer(mut self) -> Result<Self> {
-        // currently errors out "Metal error WouldBlock" fix later
+    pub fn device() -> Device {
+        // TODO
+        // currently errors out on EmbeddingResponse "Metal error WouldBlock" fix later
 
-        // let device = match Device::new_metal(0) {
+        // match Device::new_metal(0) {
         //     Ok(device) => device,
         //     Err(e) => {
-        //         log::error!("Couldn't use Metal as default device, defaulting to CPU | {e}");
+        //         error!("Couldn't use Metal as default device, defaulting to CPU | {e}");
         //         Device::Cpu
         //     }
         // };
 
-        let device = Device::Cpu;
+        // info!("Metal available {}", device.is_metal());
+        Device::Cpu
+    }
+
+    /// Builds the model and tokenizer.
+    pub async fn build_model_and_tokenizer(mut self) -> Result<Self> {
+        let device = Self::device();
 
         let repo = Repo::with_revision(
             self.model_id.clone().unwrap(),
@@ -267,22 +268,43 @@ impl Embedding for Bert {
     }
 }
 
-pub async fn generate_embeddings(content: &str, max_tokens: usize) -> Result<Vec<f32>> {
+pub async fn generate_embeddings(content: Vec<String>, _max_tokens: usize) -> Result<Vec<f32>> {
     let bert = Bert::new().build_model_and_tokenizer().await?;
 
     // chunk input text
     // use huggingface tokenizer for text splitter?
     // text_splitter::TextSplitter::new(bert.tokenizer.unwrap().borrow().into());
-    let splitter = text_splitter::TextSplitter::default().with_trim_chunks(true);
+    // let splitter = text_splitter::TextSplitter::default().with_trim_chunks(true);
 
-    let chunked_pr_content = splitter.chunks(content, max_tokens).collect::<Vec<&str>>();
+    // let chunked_pr_content = splitter.chunks(content, max_tokens).collect::<Vec<&str>>();
+
+    // Ok(bert
+    //     .generate_embeddings(chunked_pr_content)
+    //     .await
+    //     .unwrap()
+    //     .to_vec()
+    //     .unwrap())
+
+    let content = content.iter().map(|s| s.as_str()).collect::<Vec<_>>();
 
     Ok(bert
-        .generate_embeddings(chunked_pr_content)
+        .generate_embeddings(content)
         .await
         .unwrap()
         .to_vec()
         .unwrap())
+}
+
+fn similarity(e_i: &[f32], e_j: &[f32], device: &Device) -> Result<f32> {
+    // Calculate the dot product of two vectors.
+    assert_eq!(e_i.len(), e_j.len());
+    let e_i = Tensor::new(e_i, device)?;
+    let e_j = Tensor::new(e_j, device)?;
+    let sum_ij = (&e_i * &e_j)?.sum_all()?.to_scalar::<f32>()?;
+    let sum_i2 = (&e_i * &e_i)?.sum_all()?.to_scalar::<f32>()?;
+    let sum_j2 = (&e_j * &e_j)?.sum_all()?.to_scalar::<f32>()?;
+    let cosine_similarity = sum_ij / (sum_i2 * sum_j2).sqrt();
+    Ok(cosine_similarity)
 }
 
 #[cfg(test)]
@@ -300,5 +322,100 @@ mod test {
         assert_eq!(vec.len(), 2);
         assert_eq!(vec[0].len(), 384);
         assert_eq!(vec[1].len(), 384);
+    }
+
+    #[tokio::test]
+    async fn test_file_example() {
+        let device = &Bert::device();
+        // not the best approach to re-init bert, but works
+        let pr_1_embedding = generate_embeddings(
+            [r#"PR Dedupe
+
+            on:
+              pull_request:
+            
+            
+            jobs:
+              pr_dedupe:
+                runs-on: ubuntu-latest
+                steps:
+                  - name: Get source code
+                    uses: actions/checkout@v4
+            
+                  - name: PR Dedupe
+                    uses: cs50victor/pr_dedupe@v0.0.2
+                    env:
+                      UPSTASH_VECTOR_REST_URL: ${{ secrets.PR_DEDUPE_UPSTASH_VECTOR_REST_URL }}
+                      UPSTASH_VECTOR_REST_TOKEN: ${{ secrets.PR_DEDUPE_UPSTASH_VECTOR_REST_TOKEN }}
+
+            "#
+            .to_string()]
+            .to_vec(),
+            384,
+        )
+        .await
+        .unwrap();
+
+        let pr_2_embedding = generate_embeddings(
+            [r#"PR Dedupe
+
+            on:
+              pull_request:
+            
+            
+            jobs:
+              pr_dedupe:
+                runs-on: ubuntu-latest
+                steps:
+                  - name: Get source code
+                    uses: actions/checkout@v4
+            
+                  - name: PR Dedupe
+                    uses: cs50victor/pr_dedupe@v0.0.2
+                    env:
+                      UPSTASH_VECTOR_REST_URL: ${{ secrets.PR_DEDUPE_UPSTASH_VECTOR_REST_URL }}
+                      UPSTASH_VECTOR_REST_TOKEN: ${{ secrets.PR_DEDUPE_UPSTASH_VECTOR_REST_TOKEN }}
+
+            "#
+            .to_string()]
+            .to_vec(),
+            384,
+        )
+        .await
+        .unwrap();
+
+        let pr_3_embedding = generate_embeddings(
+            [r#"pr dedup
+
+            on:
+              pull_request:
+            
+            jobs:
+              dedupe:
+                runs-on: macos-latest
+                steps:
+                  - uses: actions/checkout@v4
+            
+                  - uses: cs50victor/pr_dedupe@v0.0.2
+                    env:
+                      UPSTASH_VECTOR_REST_URL: ${{ secrets.PR_DEDUPE_UPSTASH_VECTOR_REST_URL }}
+                      UPSTASH_VECTOR_REST_TOKEN: ${{ secrets.PR_DEDUPE_UPSTASH_VECTOR_REST_TOKEN }}
+
+            "#
+            .to_string()]
+            .to_vec(),
+            384,
+        )
+        .await
+        .unwrap();
+
+        let similarity_1 = similarity(&pr_1_embedding, &pr_2_embedding, device).unwrap();
+        let similarity_2 = similarity(&pr_2_embedding, &pr_3_embedding, device).unwrap();
+
+        assert_eq!(pr_1_embedding.len(), 384);
+        assert_eq!(pr_2_embedding.len(), 384);
+        assert_eq!(pr_3_embedding.len(), 384);
+        assert_eq!(similarity_1, 1.0);
+        assert!(similarity_2 > 0.90);
     }
 }
