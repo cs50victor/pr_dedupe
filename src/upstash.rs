@@ -39,9 +39,9 @@ impl From<QueryResult> for SimilarPRs {
                 .iter()
                 .map(|d| {
                     let pr_number = d.id.split(':').next_back().unwrap();
-                    SimilarPRsInner{
+                    SimilarPRsInner {
                         pr_url: add_pr_prefix(pr_number),
-                        percentage: d.score * 100.0
+                        percentage: d.score * 100.0,
                     }
                 })
                 .collect::<Vec<_>>(),

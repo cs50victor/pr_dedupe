@@ -16,8 +16,8 @@ use crate::files_to_ignore::FILES_TO_IGNORE;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SimilarPRsInner {
-    pub pr_url:String,
-    pub percentage: f32
+    pub pr_url: String,
+    pub percentage: f32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
