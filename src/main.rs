@@ -226,7 +226,7 @@ async fn main() {
         }
     };
 
-    info!("Created db client");
+    info!("Created vector db client");
 
     if let Err(e) = db_client.save_embedding(&embedding).await {
         error!("{e}");

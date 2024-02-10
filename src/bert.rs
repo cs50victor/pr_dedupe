@@ -4,7 +4,7 @@ use anyhow::{anyhow, Error as E, Result};
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
-use hf_hub::{api::tokio::Api, Cache, Repo, RepoType};
+use hf_hub::{Cache, Repo, RepoType};
 
 use rayon::prelude::*;
 use std::{
@@ -113,7 +113,7 @@ impl Default for Bert {
     /// Provides default values for `Bert`.
     fn default() -> Self {
         Self {
-            offline: false,
+            offline: true,
             model_id: Some("sentence-transformers/all-MiniLM-L6-v2".to_string()),
             model: None,
             tokenizer: None,
@@ -162,7 +162,7 @@ impl Bert {
         );
 
         //
-        let (config_filename, tokenizer_filename, weights_filename) = if self.offline {
+        let (config_filename, tokenizer_filename, weights_filename) = {
             let cache = Cache::default().repo(repo);
             (
                 cache
@@ -174,14 +174,6 @@ impl Bert {
                 cache
                     .get("model.safetensors")
                     .ok_or(anyhow!("Missing weights file in cache"))?,
-            )
-        } else {
-            let api = Api::new()?;
-            let api = api.repo(repo);
-            (
-                api.get("config.json").await?,
-                api.get("tokenizer.json").await?,
-                api.get("model.safetensors").await?,
             )
         };
         let config = std::fs::read_to_string(config_filename)?;
