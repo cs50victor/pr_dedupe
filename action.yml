@@ -71,6 +71,7 @@ runs:
       env:
         PR_NUMBER: ${{ github.event.number }}
         REPO_NAME: ${{ github.repository }}
+        GITHUB_SHA: ${{ env.GITHUB_SHA }}
 
 
 

@@ -89,6 +89,8 @@ async fn main() {
         return;
     };
 
+    let raw_url_prefix = format!("https://github.com/{}/raw/{}/", env::var("REPO_NAME").unwrap(), env::var("GITHUB_SHA").unwrap());
+
     let (rest_url, token) = match vector_db.as_str() {
         "supabase" => {
             let (supabase_url, supabase_service_role_key) = (
@@ -129,27 +131,27 @@ async fn main() {
 
     let pr_files = added_files
         .split(',')
-        .map(|file| (file, FileAction::Added))
+        .map(|file| (format!("{}/{file}", &raw_url_prefix), FileAction::Added))
         .chain(
             modified_files
                 .split(',')
-                .map(|file| (file, FileAction::Modified)),
+                .map(|file| (format!("{}/{file}", &raw_url_prefix), FileAction::Modified)),
         )
         .chain(
             added_or_modified_files
                 .split(',')
-                .map(|file| (file, FileAction::AddedModified)),
+                .map(|file| (format!("{}/{file}", &raw_url_prefix), FileAction::AddedModified)),
         );
 
     let mut pr_content = futures::stream::iter(pr_files.map(|(path, file_type)| async move {
-        match reqwest::get(path).await {
+        match reqwest::get(&path).await {
             Ok(resp) => match resp.bytes().await {
                 Ok(resp_bytes) => {
                     let content = std::str::from_utf8(&resp_bytes).unwrap();
 
                     match file_type {
                         FileAction::Added | FileAction::Modified | FileAction::AddedModified => {
-                            parse(file_type, path, Some(content))
+                            parse(file_type, &path, Some(content))
                         }
                         _ => {
                             let symbol: char = file_type.into();
@@ -160,12 +162,12 @@ async fn main() {
                 }
                 Err(e) => {
                     eprintln!("{e}");
-                    "".to_owned()
+                    exit(1);
                 }
             },
             Err(e) => {
                 eprintln!("Couldn't download {path} | Reason {e:?}");
-                "".to_owned()
+                exit(1);
             }
         }
     }))
@@ -176,11 +178,11 @@ async fn main() {
     pr_content.extend(
         removed_files
             .split(',')
-            .map(|file| parse(FileAction::Removed, file, None))
+            .map(|file| parse(FileAction::Removed, &format!("{}/{file}", &raw_url_prefix), None))
             .chain(
                 renamed_files
                     .split(',')
-                    .map(|file| parse(FileAction::Renamed, file, None)),
+                    .map(|file| parse(FileAction::Renamed, &format!("{}/{file}", &raw_url_prefix), None)),
             ),
     );
 
@@ -224,3 +226,4 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
         None => format!("{symbol} : {path}\n"),
     }
 }
+
