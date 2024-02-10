@@ -3,11 +3,11 @@ description: finds duplicate or similar pull requests
 author: Victor A. <52110451+cs50victor@users.noreply.github.com>
 inputs:
   min_similarity:
-    description: 'Minimum similarity to check for (i.e display all PRs that are 80% > similar )'
+    description: "Minimum similarity to check for (i.e display all PRs that are 80% > similar )"
     required: false
     default: 80
   top_k:
-    description: 'Number of matching PRs to return'
+    description: "Number of matching PRs to return"
     required: false
     default: 10
   vector_db:
@@ -15,16 +15,16 @@ inputs:
     required: false
     default: "upstash"
   token:
-    description: 'The GitHub token to use for downloading the action, defaults to workflow token'
+    description: "The GitHub token to use for downloading the action, defaults to workflow token"
     required: true
     default: ${{ github.token }}
 outputs:
   similar_prs:
-    description: 'Stringified json containing a list of similar PRs'
+    description: "Stringified json containing a list of similar PRs"
     value: ${{ steps.run.outputs.similar_prs }}
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Set reusable variables
       shell: bash
@@ -62,7 +62,7 @@ runs:
       id: files
       uses: jitterbit/get-changed-files@v1
       with:
-        format: 'csv'
+        format: "csv"
 
     - name: Run Action
       shell: bash
@@ -72,6 +72,3 @@ runs:
         PR_NUMBER: ${{ github.event.number }}
         REPO_NAME: ${{ github.repository }}
         GITHUB_SHA: ${{ env.GITHUB_SHA }}
-
-
-
