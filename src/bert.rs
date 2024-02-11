@@ -4,7 +4,7 @@ use anyhow::{anyhow, Error as E, Result};
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
-use hf_hub::{api::tokio::Api, Cache, Repo, RepoType};
+use hf_hub::{Cache, Repo, RepoType};
 
 use log::{error, info};
 use rayon::prelude::*;
