@@ -73,6 +73,8 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
+    env::set_var("HF_HOME", ".");
+    
     pretty_env_logger::formatted_builder()
         .filter_module("pr_dedupe", log::LevelFilter::Info)
         .init();
