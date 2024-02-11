@@ -2,7 +2,6 @@ use std::env;
 
 use anyhow::{bail, Result};
 
-
 pub fn get_upstash_envs() -> Result<(String, String)> {
     let (upstash_vector_rest_url, upstash_vector_rest_token) = (
         env::var("UPSTASH_VECTOR_REST_URL"),

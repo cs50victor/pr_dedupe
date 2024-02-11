@@ -93,46 +93,49 @@ async fn main() {
     } = args;
 
     let (rest_url, token) = match vector_db.as_str() {
-        "upstash" => {
-            match get_upstash_envs(){
-                Ok(envs) => envs,
-                Err(e) => {
-                    error!("{e}");
-                    exit(1);
-                }
+        "upstash" => match get_upstash_envs() {
+            Ok(envs) => envs,
+            Err(e) => {
+                error!("{e}");
+                exit(1);
             }
-        }
-        "supabase" => {
-            match get_upstash_envs(){
-                Ok(envs) => envs,
-                Err(e) => {
-                    error!("{e}");
-                    exit(1);
-                }
+        },
+        "supabase" => match get_upstash_envs() {
+            Ok(envs) => envs,
+            Err(e) => {
+                error!("{e}");
+                exit(1);
             }
-        }
+        },
         _ => {
             error!("Unsupported vector database name. Supported names are 'supabase', 'upstash' ");
             exit(1);
         }
     };
 
-    let pr_content = match [&added_files,&modified_files,&removed_files,&renamed_files].iter().all(|arg| arg.is_empty()){
+    let pr_content = match [
+        &added_files,
+        &modified_files,
+        &removed_files,
+        &renamed_files,
+    ]
+    .iter()
+    .all(|arg| arg.is_empty())
+    {
         true => {
             // if there's a PR with no content, it's probably spam or a bot
             info!("this pr has no content, it's probably a bot or spam");
             [" ".to_string()].to_vec()
-        },
+        }
         false => {
-        
             let raw_url_prefix = format!(
                 "https://github.com/{}/raw/{}/",
                 env::var("REPO_NAME").unwrap(),
                 env::var("GITHUB_SHA").unwrap()
             );
-        
+
             info!("raw_url_prefix {}", &raw_url_prefix);
-        
+
             let pr_files = added_files
                 .split(',')
                 .map(|file| (file, FileAction::Added))
@@ -142,47 +145,49 @@ async fn main() {
                         .map(|file| (file, FileAction::Modified)),
                 )
                 .filter(|(file, _)| {
-                    !file.is_empty() && !FILES_TO_IGNORE.iter().any(|&suffix| file.ends_with(suffix))
+                    !file.is_empty()
+                        && !FILES_TO_IGNORE.iter().any(|&suffix| file.ends_with(suffix))
                 })
                 .map(|(file, action)| (format!("{}{file}", &raw_url_prefix), action));
-        
+
             info!(
                 "downloading PR files | {:?}",
                 pr_files.clone().collect::<Vec<_>>()
             );
-        
-            let mut pr_content = futures::stream::iter(pr_files.map(|(path, file_type)| async move {
-                match reqwest::get(&path).await {
-                    Ok(resp) => match resp.bytes().await {
-                        Ok(resp_bytes) => {
-                            let content = std::str::from_utf8(&resp_bytes).unwrap();
-        
-                            match file_type {
-                                FileAction::Added | FileAction::Modified => {
-                                    parse(file_type, &path, Some(content))
-                                }
-                                _ => {
-                                    let symbol: char = file_type.into();
-                                    error!("Unexpected Filetype. Symbol {symbol}");
-                                    "".to_owned()
+
+            let mut pr_content =
+                futures::stream::iter(pr_files.map(|(path, file_type)| async move {
+                    match reqwest::get(&path).await {
+                        Ok(resp) => match resp.bytes().await {
+                            Ok(resp_bytes) => {
+                                let content = std::str::from_utf8(&resp_bytes).unwrap();
+
+                                match file_type {
+                                    FileAction::Added | FileAction::Modified => {
+                                        parse(file_type, &path, Some(content))
+                                    }
+                                    _ => {
+                                        let symbol: char = file_type.into();
+                                        error!("Unexpected Filetype. Symbol {symbol}");
+                                        "".to_owned()
+                                    }
                                 }
                             }
-                        }
+                            Err(e) => {
+                                error!("{e}");
+                                exit(1);
+                            }
+                        },
                         Err(e) => {
-                            error!("{e}");
+                            error!("Couldn't download {path} | Reason {e:?}");
                             exit(1);
                         }
-                    },
-                    Err(e) => {
-                        error!("Couldn't download {path} | Reason {e:?}");
-                        exit(1);
                     }
-                }
-            }))
-            .buffer_unordered(10)
-            .collect::<Vec<String>>()
-            .await;
-        
+                }))
+                .buffer_unordered(10)
+                .collect::<Vec<String>>()
+                .await;
+
             pr_content.extend(
                 removed_files
                     .split(',')
