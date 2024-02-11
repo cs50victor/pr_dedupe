@@ -6,6 +6,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_TERM_VERBOSE: true
   RUST_BACKTRACE: 1
+  HF_HOME: "."
 
 jobs:
   ci-rs:

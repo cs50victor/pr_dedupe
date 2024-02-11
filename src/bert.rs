@@ -4,8 +4,9 @@ use anyhow::{anyhow, Error as E, Result};
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
-use hf_hub::{api::tokio::Api, Cache, Repo, RepoType};
+use hf_hub::{Cache, Repo, RepoType};
 
+use log::{error, info};
 use rayon::prelude::*;
 use std::{
     fmt::Display,
@@ -46,23 +47,6 @@ impl EmbeddingResponse {
                         embedding.len()
                     ))),
                 }
-            }
-            EmbeddingResponse::Empty => {
-                Err(anyhow::anyhow!("empty response does not have an embedding"))
-            }
-        }
-    }
-
-    /// Get the embedding from an OpenAIEmbeddingResponse
-    pub fn to_vec2(&self) -> Result<Vec<Vec<f32>>> {
-        match self {
-            EmbeddingResponse::Bert(embedding) => {
-                // perform avg-pooling to get the embedding
-                let (_n, n_tokens, _hidden_size) = embedding.dims3()?;
-                let embedding = (embedding.sum(1)? / (n_tokens as f64))?;
-                let embedding = embedding.to_vec2()?;
-
-                Ok(embedding.clone())
             }
             EmbeddingResponse::Empty => {
                 Err(anyhow::anyhow!("empty response does not have an embedding"))
@@ -113,7 +97,7 @@ impl Default for Bert {
     /// Provides default values for `Bert`.
     fn default() -> Self {
         Self {
-            offline: false,
+            offline: true,
             model_id: Some("sentence-transformers/all-MiniLM-L6-v2".to_string()),
             model: None,
             tokenizer: None,
@@ -136,19 +120,16 @@ impl Bert {
     }
 
     pub fn device() -> Device {
-        // TODO
-        // currently errors out on EmbeddingResponse "Metal error WouldBlock" fix later
-
-        // match Device::new_metal(0) {
-        //     Ok(device) => device,
-        //     Err(e) => {
-        //         error!("Couldn't use Metal as default device, defaulting to CPU | {e}");
-        //         Device::Cpu
-        //     }
-        // };
-
-        // info!("Metal available {}", device.is_metal());
-        Device::Cpu
+        match Device::new_metal(0) {
+            Ok(device) => {
+                info!("using metal as device");
+                device
+            }
+            Err(e) => {
+                error!("Couldn't use Metal as default device, defaulting to CPU | {e}");
+                Device::Cpu
+            }
+        }
     }
 
     /// Builds the model and tokenizer.
@@ -160,9 +141,8 @@ impl Bert {
             RepoType::Model,
             self.revision.clone().unwrap(),
         );
-
         //
-        let (config_filename, tokenizer_filename, weights_filename) = if self.offline {
+        let (config_filename, tokenizer_filename, weights_filename) = {
             let cache = Cache::default().repo(repo);
             (
                 cache
@@ -174,14 +154,6 @@ impl Bert {
                 cache
                     .get("model.safetensors")
                     .ok_or(anyhow!("Missing weights file in cache"))?,
-            )
-        } else {
-            let api = Api::new()?;
-            let api = api.repo(repo);
-            (
-                api.get("config.json").await?,
-                api.get("tokenizer.json").await?,
-                api.get("model.safetensors").await?,
             )
         };
         let config = std::fs::read_to_string(config_filename)?;
@@ -310,19 +282,6 @@ fn similarity(e_i: &[f32], e_j: &[f32], device: &Device) -> Result<f32> {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[tokio::test]
-    async fn test_batch() {
-        let bert = Bert::new().build_model_and_tokenizer().await.unwrap();
-        let response = bert
-            .generate_embeddings(["Hello World", "Goodbye World"].to_vec())
-            .await;
-        let response = response.unwrap();
-        let vec = response.to_vec2().unwrap();
-        assert_eq!(vec.len(), 2);
-        assert_eq!(vec[0].len(), 384);
-        assert_eq!(vec[1].len(), 384);
-    }
 
     #[tokio::test]
     async fn test_file_example() {
