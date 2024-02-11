@@ -67,7 +67,7 @@ runs:
     - name: Run Action
       shell: bash
       id: run
-      run: ./${{ runner.os }}/${{ env.binary_name }} -m "${{ inputs.min_similarity }}" -k "${{ inputs.top_k }}" --db "${{ inputs.vector_db }}" --added "${{ steps.files.outputs.added }}" --modified "${{ steps.files.outputs.modified }}" --removed "${{ steps.files.outputs.removed }}" --renamed "${{ steps.files.outputs.removed }}"
+      run: ./${{ runner.os }}/${{ env.binary_name }} --closed ${{ github.event.pull_request.closed }} -m "${{ inputs.min_similarity }}" -k "${{ inputs.top_k }}" --db "${{ inputs.vector_db }}" --added "${{ steps.files.outputs.added }}" --modified "${{ steps.files.outputs.modified }}" --removed "${{ steps.files.outputs.removed }}" --renamed "${{ steps.files.outputs.removed }}"
       env:
         HF_HOME: "."
         PR_NUMBER: ${{ github.event.number }}

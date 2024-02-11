@@ -48,6 +48,9 @@ impl From<FileAction> for char {
 #[derive(Parser, Debug)]
 #[command(about = "finds duplicate or similar prs in a repo", long_about = None)]
 struct Args {
+    #[arg(long)]
+    closed: String,
+
     #[arg(long = "added")]
     added_files: String,
 
@@ -83,6 +86,7 @@ async fn main() {
     let args = Args::parse();
 
     let Args {
+        closed,
         min_similarity: _,
         added_files,
         modified_files,
@@ -112,6 +116,25 @@ async fn main() {
             exit(1);
         }
     };
+
+    let db_client = match Upstash::new(rest_url, token) {
+        Ok(db_client) => db_client,
+        Err(e) => {
+            error!("{e}");
+            exit(1);
+        }
+    };
+
+    info!("Created vector db client");
+
+    if closed.trim().parse::<bool>().unwrap() {
+        if let Err(e) = db_client.remove_pr_from_db().await {
+            error!("{e}");
+            exit(1);
+        }
+        info!("Deleted PR from vector db");
+        return;
+    }
 
     let pr_content = match [
         &added_files,
@@ -213,16 +236,6 @@ async fn main() {
             exit(1);
         }
     };
-
-    let db_client = match Upstash::new(rest_url, token) {
-        Ok(db_client) => db_client,
-        Err(e) => {
-            error!("{e}");
-            exit(1);
-        }
-    };
-
-    info!("Created vector db client");
 
     if let Err(e) = db_client.save_embedding(&embedding).await {
         error!("{e}");

@@ -2,6 +2,7 @@ use std::env;
 
 use anyhow::{bail, Result};
 
+use log::info;
 use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -38,7 +39,7 @@ impl From<QueryResult> for SimilarPRs {
                 .result
                 .iter()
                 .map(|d| {
-                    let pr_number = d.id.split(':').next_back().unwrap();
+                    let pr_number = uuid_to_pr_number(&d.id);
                     SimilarPRsInner {
                         pr_url: add_pr_prefix(pr_number),
                         percentage: d.score * 100.0,
@@ -94,6 +95,31 @@ impl Upstash {
         Ok(())
     }
 
+    pub async fn remove_pr_from_db(&self) -> Result<()> {
+        let (repo_name, pr_number) = (env::var("REPO_NAME")?, env::var("PR_NUMBER")?);
+
+        let data = format!("{:?}", [uuid(&repo_name, &pr_number)]);
+
+        println!("data {data}");
+
+        let uri = self.url_endpoint.join("delete")?;
+
+        let resp = self.client.delete(uri).body(data).send().await?;
+
+        let status = resp.status();
+        let resp_data = resp.text().await.unwrap();
+        if status.as_u16() != 200 {
+            bail!(
+                "Couldn't remove PR embedding from vector db | Reason {}",
+                resp_data
+            );
+        }
+        info!("response data after removing PR from db, {resp_data}");
+        info!("remove PR from db resp");
+
+        Ok(())
+    }
+
     pub async fn query(&self, embedding: &Vec<f32>, top_k: u8) -> Result<SimilarPRs> {
         let data = json!({
             "topK": top_k,
@@ -118,6 +144,10 @@ impl Upstash {
     }
 }
 
-fn uuid(repo_name: &str, pr_number: &str) -> String {
+pub fn uuid(repo_name: &str, pr_number: &str) -> String {
     format!("[{repo_name}]:{pr_number}")
+}
+
+pub fn uuid_to_pr_number(uuid: &str) -> &str {
+    uuid.split(':').next_back().unwrap()
 }
