@@ -1,6 +1,7 @@
-use std::env;
+use std::{env, process::exit};
 
 use anyhow::{bail, Result};
+use log::error;
 
 pub fn get_upstash_envs() -> Result<(String, String)> {
     let (upstash_vector_rest_url, upstash_vector_rest_token) = (
@@ -29,4 +30,32 @@ pub fn get_supabase_envs() -> Result<(String, String)> {
     }
 
     Ok((supabase_url.unwrap(), supabase_service_role_key.unwrap()))
+}
+
+pub fn uuid(repo_name: &str, pr_number: &str) -> String {
+    format!("[{repo_name}]:{pr_number}")
+}
+
+pub fn uuid_to_pr_number(uuid: &str) -> &str {
+    uuid.split(':').next_back().unwrap()
+}
+
+pub fn log_err_and_exit(msg: impl AsRef<str>) -> ! {
+    error!("{}",msg.as_ref());
+    exit(1);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uuid_encode_and_decode() {
+        let repo_name = "cs50victor/pr_dedupe";
+        let pr_number = "2";
+
+        let uuid = uuid(repo_name, pr_number);
+
+        assert_eq!(uuid_to_pr_number(&uuid), pr_number);
+    }
 }

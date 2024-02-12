@@ -126,7 +126,7 @@ impl Bert {
                 device
             }
             Err(e) => {
-                error!("Couldn't use Metal as default device, defaulting to CPU | {e}");
+                error!("Couldn't set Metal as default device, defaulting to CPU | {e}");
                 Device::Cpu
             }
         }

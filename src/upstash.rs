@@ -7,7 +7,7 @@ use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{SimilarPRs, SimilarPRsInner};
+use crate::{utils::{uuid, uuid_to_pr_number}, SimilarPRs, SimilarPRsInner};
 
 pub struct Upstash {
     client: Client,
@@ -108,6 +108,7 @@ impl Upstash {
 
         let status = resp.status();
         let resp_data = resp.text().await.unwrap();
+
         if status.as_u16() != 200 {
             bail!(
                 "Couldn't remove PR embedding from vector db | Reason {}",
@@ -115,7 +116,6 @@ impl Upstash {
             );
         }
         info!("response data after removing PR from db, {resp_data}");
-        info!("remove PR from db resp");
 
         Ok(())
     }
@@ -142,12 +142,4 @@ impl Upstash {
 
         Ok(results.into())
     }
-}
-
-pub fn uuid(repo_name: &str, pr_number: &str) -> String {
-    format!("[{repo_name}]:{pr_number}")
-}
-
-pub fn uuid_to_pr_number(uuid: &str) -> &str {
-    uuid.split(':').next_back().unwrap()
 }
