@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    utils::{uuid, uuid_to_pr_number},
+    utils::{uuid, uuid_to_pr_number, uuid_to_repo_name, VectorDB},
     SimilarPRs, SimilarPRsInner,
 };
 
@@ -30,17 +30,18 @@ struct QueryResult {
 
 impl From<QueryResult> for SimilarPRs {
     fn from(val: QueryResult) -> Self {
-        let add_pr_prefix = |pr_number: &str| {
-            format!(
-                "https://github.com/{}/pull/{pr_number}",
-                env::var("REPO_NAME").unwrap(),
-            )
-        };
+        let repo_name = env::var("REPO_NAME").unwrap();
+
+        // ask upstash team to provide feature using api?
+        let add_pr_prefix =
+            |pr_number: &str| format!("https://github.com/{}/pull/{pr_number}", &repo_name,);
 
         SimilarPRs {
             data: val
                 .result
                 .iter()
+                //
+                .filter(|d| repo_name == uuid_to_repo_name(&d.id))
                 .map(|d| {
                     let pr_number = uuid_to_pr_number(&d.id);
                     SimilarPRsInner {
@@ -54,7 +55,21 @@ impl From<QueryResult> for SimilarPRs {
 }
 
 impl Upstash {
-    pub fn new(upstash_vector_rest_url: String, upstash_vector_rest_token: String) -> Result<Self> {
+    pub fn new() -> Result<Self> {
+        let (upstash_vector_rest_url, upstash_vector_rest_token) = (
+            env::var("UPSTASH_VECTOR_REST_URL"),
+            env::var("UPSTASH_VECTOR_REST_TOKEN"),
+        );
+
+        if upstash_vector_rest_url.is_err() || upstash_vector_rest_token.is_err() {
+            bail!("both UPSTASH_VECTOR_REST_URL and UPSTASH_VECTOR_REST_TOKEN env variables need to use supabase's vector database");
+        }
+
+        let (upstash_vector_rest_url, upstash_vector_rest_token) = (
+            upstash_vector_rest_url.unwrap(),
+            upstash_vector_rest_token.unwrap(),
+        );
+
         let mut value =
             header::HeaderValue::from_str(&format!("Bearer {upstash_vector_rest_token}"))?;
 
@@ -74,8 +89,10 @@ impl Upstash {
             url_endpoint,
         })
     }
+}
 
-    pub async fn save_embedding(&self, embedding: &Vec<f32>) -> Result<()> {
+impl VectorDB for Upstash {
+    async fn save_embedding(&self, embedding: &[f32]) -> Result<()> {
         let (repo_name, pr_number) = (env::var("REPO_NAME")?, env::var("PR_NUMBER")?);
 
         let data = json!({
@@ -98,7 +115,7 @@ impl Upstash {
         Ok(())
     }
 
-    pub async fn remove_pr_from_db(&self) -> Result<()> {
+    async fn remove_pr(&self) -> Result<()> {
         let (repo_name, pr_number) = (env::var("REPO_NAME")?, env::var("PR_NUMBER")?);
 
         let data = format!("{:?}", [uuid(&repo_name, &pr_number)]);
@@ -123,12 +140,7 @@ impl Upstash {
         Ok(())
     }
 
-    pub async fn query(
-        &self,
-        embedding: &Vec<f32>,
-        top_k: u8,
-        min_similarity: u8,
-    ) -> Result<SimilarPRs> {
+    async fn query(&self, embedding: &[f32], top_k: u8, min_similarity: u8) -> Result<SimilarPRs> {
         let data = json!({
             "topK": top_k,
             "vector": &embedding,

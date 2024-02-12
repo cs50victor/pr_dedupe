@@ -15,7 +15,7 @@ use upstash::Upstash;
 
 use crate::{
     files_to_ignore::FILES_TO_IGNORE,
-    utils::{get_upstash_envs, log_err_and_exit, set_hf_home_env},
+    utils::{log_err_and_exit, set_hf_home_env, VectorDB},
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -67,7 +67,7 @@ struct Args {
     renamed_files: String,
 
     #[arg(long = "db", default_value = "upstash")]
-    vector_db: String,
+    vector_db_provider: String,
 
     /// Number similar matches to return
     #[arg(short = 'k', default_value_t = 10)]
@@ -96,22 +96,22 @@ async fn main() {
         removed_files,
         renamed_files,
         top_k,
-        vector_db,
+        vector_db_provider,
     } = args;
 
-    let (rest_url, token) = match vector_db.as_str() {
-        "upstash" => match get_upstash_envs() {
-            Ok(envs) => envs,
+    let vector_db = match vector_db_provider.as_str() {
+        "upstash" => match Upstash::new() {
+            Ok(db_client) => db_client,
             Err(e) => {
                 log_err_and_exit(format!("{e}"));
             }
         },
-        "supabase" => match get_upstash_envs() {
-            Ok(envs) => envs,
-            Err(e) => {
-                log_err_and_exit(format!("{e}"));
-            }
-        },
+        // "supabase" => match get_upstash_envs() {
+        //     Ok(envs) => envs,
+        //     Err(e) => {
+        //         log_err_and_exit(format!("{e}"));
+        //     }
+        // },
         _ => {
             log_err_and_exit(
                 "Unsupported vector database name. Supported names are 'supabase', 'upstash' ",
@@ -119,17 +119,10 @@ async fn main() {
         }
     };
 
-    let db_client = match Upstash::new(rest_url, token) {
-        Ok(db_client) => db_client,
-        Err(e) => {
-            log_err_and_exit(format!("{e}"));
-        }
-    };
-
     info!("Created vector db client");
 
     if closed.trim().parse::<bool>().unwrap() {
-        if let Err(e) = db_client.remove_pr_from_db().await {
+        if let Err(e) = vector_db.remove_pr().await {
             log_err_and_exit(format!("{e}"));
         }
         info!("Deleted PR from vector db");
@@ -235,13 +228,13 @@ async fn main() {
         }
     };
 
-    if let Err(e) = db_client.save_embedding(&embedding).await {
+    if let Err(e) = vector_db.save_embedding(&embedding).await {
         log_err_and_exit(format!("{e}"));
     }
 
     info!("Saved embedding");
 
-    let similar_prs = match db_client.query(&embedding, top_k, min_similarity).await {
+    let similar_prs = match vector_db.query(&embedding, top_k, min_similarity).await {
         Ok(resp) => serde_json::to_string(&resp).unwrap(),
         Err(e) => {
             log_err_and_exit(format!("{e}"));
