@@ -123,7 +123,12 @@ impl Upstash {
         Ok(())
     }
 
-    pub async fn query(&self, embedding: &Vec<f32>, top_k: u8, min_similarity: u8) -> Result<SimilarPRs> {
+    pub async fn query(
+        &self,
+        embedding: &Vec<f32>,
+        top_k: u8,
+        min_similarity: u8,
+    ) -> Result<SimilarPRs> {
         let data = json!({
             "topK": top_k,
             "vector": &embedding,
@@ -144,8 +149,10 @@ impl Upstash {
         let results = serde_json::from_str::<QueryResult>(&resp.text().await.unwrap())?;
 
         // ask upstash team to provide feature using api?
-        let mut similar_prs : SimilarPRs = results.into();
-        similar_prs.data.retain(|d| d.percentage >= min_similarity as f32);
+        let mut similar_prs: SimilarPRs = results.into();
+        similar_prs
+            .data
+            .retain(|d| d.percentage >= min_similarity as f32);
         Ok(similar_prs)
     }
 }

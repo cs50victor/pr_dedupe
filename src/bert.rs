@@ -263,13 +263,12 @@ pub async fn generate_embeddings(content: Vec<String>, _max_tokens: usize) -> Re
         .unwrap())
 }
 
-
 #[cfg(test)]
 mod test {
     use crate::utils::set_hf_home_env;
-    
+
     use super::*;
-    
+
     fn similarity(e_i: &[f32], e_j: &[f32], device: &Device) -> Result<f32> {
         assert_eq!(e_i.len(), e_j.len());
         let e_i = Tensor::new(e_i, device)?;
@@ -281,7 +280,7 @@ mod test {
         info!("cosine_similarity {cosine_similarity}");
         Ok(cosine_similarity)
     }
-    
+
     #[tokio::test]
     async fn test_file_example() {
         set_hf_home_env();
