@@ -90,7 +90,7 @@ async fn main() {
 
     let Args {
         closed,
-        min_similarity: _,
+        min_similarity,
         added_files,
         modified_files,
         removed_files,
@@ -241,7 +241,7 @@ async fn main() {
 
     info!("Saved embedding");
 
-    let similar_prs = match db_client.query(&embedding, top_k).await {
+    let similar_prs = match db_client.query(&embedding, top_k, min_similarity).await {
         Ok(resp) => serde_json::to_string(&resp).unwrap(),
         Err(e) => {
             log_err_and_exit(format!("{e}"));
