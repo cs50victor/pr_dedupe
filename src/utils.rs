@@ -41,7 +41,7 @@ pub fn uuid_to_pr_number(uuid: &str) -> &str {
 }
 
 pub fn log_err_and_exit(msg: impl AsRef<str>) -> ! {
-    error!("{}",msg.as_ref());
+    error!("{}", msg.as_ref());
     exit(1);
 }
 

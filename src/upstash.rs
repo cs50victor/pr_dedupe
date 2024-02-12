@@ -7,7 +7,10 @@ use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{utils::{uuid, uuid_to_pr_number}, SimilarPRs, SimilarPRsInner};
+use crate::{
+    utils::{uuid, uuid_to_pr_number},
+    SimilarPRs, SimilarPRsInner,
+};
 
 pub struct Upstash {
     client: Client,

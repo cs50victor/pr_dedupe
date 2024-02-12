@@ -4,11 +4,11 @@ mod supabase;
 mod upstash;
 mod utils;
 
-use std::{env, process::exit};
+use std::env;
 
 use clap::Parser;
 use futures::stream::StreamExt;
-use log::{error, info};
+use log::info;
 
 use serde::{Deserialize, Serialize};
 use upstash::Upstash;
@@ -191,7 +191,10 @@ async fn main() {
                                     }
                                     _ => {
                                         let symbol: char = file_type.into();
-                                        log_err_and_exit(format!("Unexpected Filetype. Symbol {}", symbol));
+                                        log_err_and_exit(format!(
+                                            "Unexpected Filetype. Symbol {}",
+                                            symbol
+                                        ));
                                     }
                                 }
                             }
