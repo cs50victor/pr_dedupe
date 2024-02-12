@@ -4,16 +4,19 @@ mod supabase;
 mod upstash;
 mod utils;
 
-use std::{env, process::exit};
+use std::env;
 
 use clap::Parser;
 use futures::stream::StreamExt;
-use log::{error, info};
+use log::info;
 
 use serde::{Deserialize, Serialize};
 use upstash::Upstash;
 
-use crate::{files_to_ignore::FILES_TO_IGNORE, utils::get_upstash_envs};
+use crate::{
+    files_to_ignore::FILES_TO_IGNORE,
+    utils::{get_upstash_envs, log_err_and_exit, set_hf_home_env},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SimilarPRsInner {
@@ -77,7 +80,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
-    env::set_var("HF_HOME", ".");
+    set_hf_home_env();
 
     pretty_env_logger::formatted_builder()
         .filter_module("pr_dedupe", log::LevelFilter::Info)
@@ -100,28 +103,26 @@ async fn main() {
         "upstash" => match get_upstash_envs() {
             Ok(envs) => envs,
             Err(e) => {
-                error!("{e}");
-                exit(1);
+                log_err_and_exit(format!("{e}"));
             }
         },
         "supabase" => match get_upstash_envs() {
             Ok(envs) => envs,
             Err(e) => {
-                error!("{e}");
-                exit(1);
+                log_err_and_exit(format!("{e}"));
             }
         },
         _ => {
-            error!("Unsupported vector database name. Supported names are 'supabase', 'upstash' ");
-            exit(1);
+            log_err_and_exit(
+                "Unsupported vector database name. Supported names are 'supabase', 'upstash' ",
+            );
         }
     };
 
     let db_client = match Upstash::new(rest_url, token) {
         Ok(db_client) => db_client,
         Err(e) => {
-            error!("{e}");
-            exit(1);
+            log_err_and_exit(format!("{e}"));
         }
     };
 
@@ -129,8 +130,7 @@ async fn main() {
 
     if closed.trim().parse::<bool>().unwrap() {
         if let Err(e) = db_client.remove_pr_from_db().await {
-            error!("{e}");
-            exit(1);
+            log_err_and_exit(format!("{e}"));
         }
         info!("Deleted PR from vector db");
         return;
@@ -146,7 +146,6 @@ async fn main() {
     .all(|arg| arg.is_empty())
     {
         true => {
-            // if there's a PR with no content, it's probably spam or a bot
             info!("this pr has no content, it's probably a bot or spam");
             [" ".to_string()].to_vec()
         }
@@ -191,19 +190,19 @@ async fn main() {
                                     }
                                     _ => {
                                         let symbol: char = file_type.into();
-                                        error!("Unexpected Filetype. Symbol {symbol}");
-                                        "".to_owned()
+                                        log_err_and_exit(format!(
+                                            "Unexpected Filetype. Symbol {}",
+                                            symbol
+                                        ));
                                     }
                                 }
                             }
                             Err(e) => {
-                                error!("{e}");
-                                exit(1);
+                                log_err_and_exit(format!("{e}"));
                             }
                         },
                         Err(e) => {
-                            error!("Couldn't download {path} | Reason {e:?}");
-                            exit(1);
+                            log_err_and_exit(format!("Couldn't download {path} | Reason {e:?}"));
                         }
                     }
                 }))
@@ -232,14 +231,12 @@ async fn main() {
     let embedding = match bert::generate_embeddings(pr_content, 384).await {
         Ok(embedding) => embedding,
         Err(e) => {
-            error!("{e}");
-            exit(1);
+            log_err_and_exit(format!("{e}"));
         }
     };
 
     if let Err(e) = db_client.save_embedding(&embedding).await {
-        error!("{e}");
-        exit(1);
+        log_err_and_exit(format!("{e}"));
     }
 
     info!("Saved embedding");
@@ -247,8 +244,7 @@ async fn main() {
     let similar_prs = match db_client.query(&embedding, top_k).await {
         Ok(resp) => serde_json::to_string(&resp).unwrap(),
         Err(e) => {
-            error!("{e}");
-            exit(1);
+            log_err_and_exit(format!("{e}"));
         }
     };
 
