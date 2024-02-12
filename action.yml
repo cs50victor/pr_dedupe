@@ -52,9 +52,13 @@ runs:
 
     - name: Download Action
       shell: bash
-      run: |
-        gh release download ${{ steps.get_action_version.outputs.version }} --repo ${{ env.action_org }}/${{ env.action_repo }} --pattern '${{ runner.os }}.tgz'
-        tar -xzf ${{ runner.os }}.tgz
+      run: gh release download ${{ steps.get_action_version.outputs.version }} -R ${{ env.action_org }}/${{ env.action_repo }} -p '${{ runner.os }}.tgz' -O - | tar -xz
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+
+    - name: Download Model Info
+      shell: bash
+      run: gh release download ${{ steps.get_action_version.outputs.version }} -R ${{ env.action_org }}/${{ env.action_repo }} -A tar.gz -O - | tar -xz -C . --strip-components=1 ${{ env.action_repo }}-${{ steps.get_action_version.outputs.version }}/hub
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
 
