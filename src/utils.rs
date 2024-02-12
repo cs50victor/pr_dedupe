@@ -45,6 +45,14 @@ pub fn log_err_and_exit(msg: impl AsRef<str>) -> ! {
     exit(1);
 }
 
+/// sets HF HOME env if it doesn't exist
+pub fn set_hf_home_env() {
+    let key = "HF_HOME";
+    if env::var(key).is_err() {
+        env::set_var(key, ".");
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

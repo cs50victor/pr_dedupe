@@ -15,7 +15,7 @@ use upstash::Upstash;
 
 use crate::{
     files_to_ignore::FILES_TO_IGNORE,
-    utils::{get_upstash_envs, log_err_and_exit},
+    utils::{get_upstash_envs, log_err_and_exit, set_hf_home_env},
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -80,7 +80,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
-    env::set_var("HF_HOME", ".");
+    set_hf_home_env();
 
     pretty_env_logger::formatted_builder()
         .filter_module("pr_dedupe", log::LevelFilter::Info)
@@ -146,7 +146,6 @@ async fn main() {
     .all(|arg| arg.is_empty())
     {
         true => {
-            // if there's a PR with no content, it's probably spam or a bot
             info!("this pr has no content, it's probably a bot or spam");
             [" ".to_string()].to_vec()
         }

@@ -281,10 +281,15 @@ fn similarity(e_i: &[f32], e_j: &[f32], device: &Device) -> Result<f32> {
 
 #[cfg(test)]
 mod test {
+
+    use crate::utils::set_hf_home_env;
+
     use super::*;
 
     #[tokio::test]
     async fn test_file_example() {
+        set_hf_home_env();
+
         let device = &Bert::device();
         // not the best approach to re-init bert, but works
         let pr_1_embedding = generate_embeddings(
