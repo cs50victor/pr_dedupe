@@ -374,13 +374,15 @@ mod test {
 
         let device = &Bert::device();
 
+        #[allow(unused_variables)]
         let similarity_1 = similarity(&pr_1_embedding, &pr_2_embedding, device).unwrap();
+        #[allow(unused_variables)]
         let similarity_2 = similarity(&pr_2_embedding, &pr_3_embedding, device).unwrap();
 
         assert_eq!(pr_1_embedding.len(), 384);
         assert_eq!(pr_2_embedding.len(), 384);
         assert_eq!(pr_3_embedding.len(), 384);
-        // TODO: find out why similarity_1 == NaN on aarch/macos targets 
+        // TODO: find out why similarity_1 == NaN on aarch/macos targets
         // ( only noticing this error on Github Runner )
         #[cfg(not(target_arch = "aarch64"))]
         assert_eq!(similarity_1, 1.0);
