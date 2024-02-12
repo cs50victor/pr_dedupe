@@ -58,7 +58,11 @@ runs:
 
     - name: Download Model Info
       shell: bash
-      run: gh release download ${{ steps.get_action_version.outputs.version }} -R ${{ env.action_org }}/${{ env.action_repo }} -A tar.gz -O - | tar -xz -C . --strip-components=1 ${{ env.action_repo }}-${{ steps.get_action_version.outputs.version }}/hub
+      run: | 
+          tag=${{ steps.get_action_version.outputs.version }}
+          tag=${tag:1}
+          echo $tag
+          gh release download ${{ steps.get_action_version.outputs.version }} -R ${{ env.action_org }}/${{ env.action_repo }} -A tar.gz -O - | tar -xz -C . --strip-components=1 ${{ env.action_repo }}-$tag/hub
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
 
