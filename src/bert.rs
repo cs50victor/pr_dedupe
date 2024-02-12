@@ -6,7 +6,7 @@ use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use hf_hub::{Cache, Repo, RepoType};
 
-use log::{error, info};
+use log::info;
 use rayon::prelude::*;
 use std::{
     fmt::Display,
@@ -110,22 +110,24 @@ impl AsRef<Self> for Bert {
 }
 
 impl Bert {
-    /// Creates a new `Bert` instance with a specified prompt.
     pub fn new() -> Self {
         Self::default()
     }
 
     pub fn device() -> Device {
-        match Device::new_metal(0) {
-            Ok(device) => {
-                info!("using metal as device");
-                device
-            }
-            Err(e) => {
-                error!("Couldn't set Metal as default device, defaulting to CPU | {e}");
-                Device::Cpu
-            }
-        }
+        // default to CPU, Metal randomly errors out ('Wouldblock')
+        // TODO: reach out to the huggingface/candle team + find out why
+        Device::Cpu
+        // match Device::new_metal(0) {
+        //     Ok(device) => {
+        //         info!("using metal as device");
+        //         device
+        //     }
+        //     Err(e) => {
+        //         error!("Couldn't set Metal as default device, defaulting to CPU | {e}");
+        //         Device::Cpu
+        //     }
+        // }
     }
 
     /// Builds the model and tokenizer.
@@ -204,7 +206,7 @@ impl Embedding for Bert {
         let embeddings_arc = Arc::new(Mutex::new(embeddings));
 
         // Use rayon to compute embeddings in parallel
-        log::info!("Computing embeddings");
+        info!("Computing embeddings");
         let start = std::time::Instant::now();
         token_ids.par_iter().try_for_each_with(
             embeddings_arc.clone(),
@@ -221,8 +223,8 @@ impl Embedding for Bert {
                 Ok::<(), anyhow::Error>(())
             },
         )?;
-        log::info!("Done computing embeddings");
-        log::info!("Embeddings took {:?} to generate", start.elapsed());
+        info!("Done computing embeddings");
+        info!("Embeddings took {:?} to generate", start.elapsed());
 
         // Retrieve the final ordered embeddings
         let embeddings_arc = Arc::try_unwrap(embeddings_arc)
@@ -379,9 +381,7 @@ mod test {
         assert_eq!(pr_3_embedding.len(), 384);
         // TODO: find out why similarity_1 == NaN on aarch/macos Github runner
         // ( only noticing this error on Github Runner )
-        #[cfg(not(target_arch = "aarch64"))]
         assert_eq!(similarity_1, 1.0);
-        #[cfg(not(target_arch = "aarch64"))]
         assert!(similarity_2 > 0.90);
     }
 }
