@@ -240,6 +240,9 @@ impl Embedding for Bert {
 
 pub async fn generate_embeddings(content: Vec<String>, _max_tokens: usize) -> Result<Vec<f32>> {
     let bert = Bert::new().build_model_and_tokenizer().await?;
+    let x = content.join(" ");
+    // TODO: chunk later
+    let content = [x.as_str()].to_vec();
 
     // chunk input text
     // use huggingface tokenizer for text splitter?
@@ -255,7 +258,7 @@ pub async fn generate_embeddings(content: Vec<String>, _max_tokens: usize) -> Re
     //     .to_vec()
     //     .unwrap())
 
-    let content = content.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
+    // let content = content.iter().map(|s| s.as_str()).collect::<Vec<&str>>();
 
     Ok(bert
         .generate_embeddings(content)
