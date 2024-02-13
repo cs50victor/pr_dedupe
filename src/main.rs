@@ -228,12 +228,6 @@ async fn main() {
         }
     };
 
-    if let Err(e) = vector_db.save_embedding(&embedding).await {
-        log_err_and_exit(format!("{e}"));
-    }
-
-    info!("Saved embedding");
-
     let similar_prs = match vector_db.query(&embedding, top_k, min_similarity).await {
         Ok(resp) => serde_json::to_string(&resp).unwrap(),
         Err(e) => {
@@ -242,6 +236,12 @@ async fn main() {
     };
 
     info!("Queried for similar PRs");
+
+    if let Err(e) = vector_db.save_embedding(&embedding).await {
+        log_err_and_exit(format!("{e}"));
+    }
+
+    info!("Saved embedding");
 
     info!("Similar PRs {similar_prs:?}");
     // check for similar PRs
