@@ -305,7 +305,7 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
 }
 
 fn multi_line_input(key: &str, value: &str) -> Result<()> {
-    let delimiter = "EOF";
+    let delimiter = "*";
 
     std::fs::write(env::var("GITHUB_OUTPUT")?, format!("{key}<<{delimiter}"))?;
 

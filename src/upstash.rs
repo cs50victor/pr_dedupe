@@ -36,12 +36,17 @@ impl From<QueryResult> for SimilarPRs {
         let add_pr_prefix =
             |pr_number: &str| format!("https://github.com/{}/pull/{pr_number}", &repo_name,);
 
+        let curr_pr = add_pr_prefix(&env::var("PR_NUMBER").unwrap());
+
         SimilarPRs {
             data: val
                 .result
                 .iter()
                 //
-                .filter(|d| repo_name == uuid_to_repo_name(&d.id))
+                .filter(|d| {
+                    repo_name == uuid_to_repo_name(&d.id)
+                        && add_pr_prefix(uuid_to_pr_number(&d.id)) != curr_pr
+                })
                 .map(|d| {
                     let pr_number = uuid_to_pr_number(&d.id);
                     SimilarPRsInner {
