@@ -285,7 +285,7 @@ async fn main() {
     info!("Similar PRs markdown : {x}");
 
     // check for similar PRs
-    write_append(
+    std::fs::write(
         env::var("GITHUB_OUTPUT").unwrap(),
         format!("similar_prs={similar_prs_str}"),
     )
@@ -312,7 +312,7 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
 fn multi_line_input(key: &str, value: &str) -> Result<()> {
     let delimiter = "EOF";
 
-    write_append(env::var("GITHUB_OUTPUT")?, format!("{key}<<{delimiter}"))?;
+    std::fs::write(env::var("GITHUB_OUTPUT")?, format!("{key}<<{delimiter}"))?;
 
     write_append(env::var("GITHUB_OUTPUT")?, format!("{key}={value}"))?;
 
