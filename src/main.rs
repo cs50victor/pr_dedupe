@@ -10,6 +10,7 @@ use clap::Parser;
 use futures::stream::StreamExt;
 use log::info;
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use upstash::Upstash;
 
@@ -285,12 +286,9 @@ async fn main() {
     )
     .unwrap();
 
-    std::fs::write(
-        env::var("GITHUB_OUTPUT").unwrap(),
-        format!(
-            "similar_prs_markdown={}",
-            serde_json::to_string(&similar_prs.to_markdown()).unwrap()
-        ),
+    multi_line_input(
+        "similar_prs_markdown",
+        &serde_json::to_string(&similar_prs.to_markdown()).unwrap(),
     )
     .unwrap();
 }
@@ -304,4 +302,16 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
         }
         None => format!("{symbol} : {path}\n"),
     }
+}
+
+fn multi_line_input(key: &str, value: &str) -> Result<()> {
+    let delimiter = "EOF";
+
+    std::fs::write(env::var("GITHUB_OUTPUT")?, format!("{key}<<{delimiter}"))?;
+
+    std::fs::write(env::var("GITHUB_OUTPUT")?, format!("{key}={value}"))?;
+
+    std::fs::write(env::var("GITHUB_OUTPUT")?, delimiter)?;
+
+    Ok(())
 }
