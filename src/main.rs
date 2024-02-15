@@ -29,6 +29,35 @@ pub struct SimilarPRs {
     pub data: Vec<SimilarPRsInner>,
 }
 
+impl SimilarPRs {
+    pub fn to_markdown(&self) -> String {
+        match self.data.is_empty() {
+            true => "".into(),
+            false => {
+                #[allow(clippy::format_collect)]
+                let line = self
+                    .data
+                    .iter()
+                    .map(|f| {
+                        format!(
+                            "|#{}|{}%|",
+                            &f.pr_url.split("pull").nth(1).unwrap()[1..],
+                            f.percentage
+                        )
+                    })
+                    .collect::<String>();
+
+                // self.data.iter().fold(String::from("| PR | Similarity |\n| ---   | --- |\n"), | mut output, b| {
+                //     let (url, percentage) = (&b.pr_url.split("pull").next().unwrap()[1..], b.percentage);
+                //     write!(output, "|#{}|{}%|",url.to_owned(), percentage);
+                //     output
+                // })
+
+                format!("| PR | Similarity |\n| ---   | --- |\n{}", line)
+            }
+        }
+    }
+}
 #[derive(Clone, Copy, Debug)]
 enum FileAction {
     Added,
@@ -229,11 +258,13 @@ async fn main() {
     };
 
     let similar_prs = match vector_db.query(&embedding, top_k, min_similarity).await {
-        Ok(resp) => serde_json::to_string(&resp).unwrap(),
+        Ok(resp) => resp,
         Err(e) => {
             log_err_and_exit(format!("{e}"));
         }
     };
+
+    let similar_prs_str = serde_json::to_string(&similar_prs).unwrap();
 
     info!("Queried for similar PRs");
 
@@ -243,11 +274,23 @@ async fn main() {
 
     info!("Saved embedding");
 
-    info!("Similar PRs {similar_prs:?}");
+    info!("Similar PRs string : {similar_prs_str:?}");
+    let x = &similar_prs.to_markdown();
+    info!("Similar PRs markdown : {x}");
+
     // check for similar PRs
     std::fs::write(
         env::var("GITHUB_OUTPUT").unwrap(),
-        format!("similar_prs={similar_prs}"),
+        format!("similar_prs={similar_prs_str}"),
+    )
+    .unwrap();
+
+    std::fs::write(
+        env::var("GITHUB_OUTPUT").unwrap(),
+        format!(
+            "similar_prs_markdown={}",
+            serde_json::to_string(&similar_prs.to_markdown()).unwrap()
+        ),
     )
     .unwrap();
 }
