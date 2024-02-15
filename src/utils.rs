@@ -1,4 +1,10 @@
-use std::{env, process::exit};
+use std::{
+    env,
+    fs::File,
+    io::{self, Write},
+    path::Path,
+    process::exit,
+};
 
 use log::error;
 
@@ -35,6 +41,13 @@ pub fn set_hf_home_env() {
     if env::var(key).is_err() {
         env::set_var(key, ".");
     };
+}
+
+pub fn write_append<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result<()> {
+    fn inner(path: &Path, contents: &[u8]) -> io::Result<()> {
+        File::options().append(true).open(path)?.write_all(contents)
+    }
+    inner(path.as_ref(), contents.as_ref())
 }
 
 #[cfg(test)]
