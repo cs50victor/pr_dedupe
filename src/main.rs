@@ -4,7 +4,12 @@ mod supabase;
 mod upstash;
 mod utils;
 
-use std::env;
+use std::{
+    env,
+    fs::File,
+    io::{self, Write},
+    path::Path,
+};
 
 use clap::Parser;
 use futures::stream::StreamExt;
@@ -280,7 +285,7 @@ async fn main() {
     info!("Similar PRs markdown : {x}");
 
     // check for similar PRs
-    std::fs::write(
+    write_append(
         env::var("GITHUB_OUTPUT").unwrap(),
         format!("similar_prs={similar_prs_str}"),
     )
@@ -305,13 +310,20 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
 }
 
 fn multi_line_input(key: &str, value: &str) -> Result<()> {
-    let delimiter = "*";
+    let delimiter = "EOF";
 
-    std::fs::write(env::var("GITHUB_OUTPUT")?, format!("{key}<<{delimiter}"))?;
+    write_append(env::var("GITHUB_OUTPUT")?, format!("{key}<<{delimiter}"))?;
 
-    std::fs::write(env::var("GITHUB_OUTPUT")?, format!("{key}={value}"))?;
+    write_append(env::var("GITHUB_OUTPUT")?, format!("{key}={value}"))?;
 
-    std::fs::write(env::var("GITHUB_OUTPUT")?, delimiter)?;
+    write_append(env::var("GITHUB_OUTPUT")?, format!("'{delimiter}'"))?;
 
     Ok(())
+}
+
+pub fn write_append<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result<()> {
+    fn inner(path: &Path, contents: &[u8]) -> io::Result<()> {
+        File::options().append(true).open(path)?.write_all(contents)
+    }
+    inner(path.as_ref(), contents.as_ref())
 }
