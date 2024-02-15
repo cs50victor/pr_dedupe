@@ -316,7 +316,7 @@ fn multi_line_input(key: &str, value: &str) -> Result<()> {
 
     write_append(env::var("GITHUB_OUTPUT")?, format!("{key}={value}"))?;
 
-    write_append(env::var("GITHUB_OUTPUT")?, format!("'{delimiter}'"))?;
+    write_append(env::var("GITHUB_OUTPUT")?, delimiter)?;
 
     Ok(())
 }
