@@ -22,6 +22,9 @@ outputs:
   similar_prs:
     description: "Stringified json containing a list of similar PRs"
     value: ${{ steps.run.outputs.similar_prs }}
+  similar_prs_markdown:
+    description: "Github Markdown containing the list of similar PRs"
+    value: ${{ steps.run.outputs.similar_prs_markdown }}
 
 runs:
   using: "composite"
