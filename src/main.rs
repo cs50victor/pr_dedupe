@@ -15,7 +15,7 @@ use upstash::Upstash;
 
 use crate::{
     files_to_ignore::FILES_TO_IGNORE,
-    utils::{log_err_and_exit, set_hf_home_env, VectorDB},
+    utils::{log_err_and_exit, set_hf_home_env, set_output, VectorDB},
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -278,18 +278,11 @@ async fn main() {
     let x = &similar_prs.to_html_table();
     info!("Similar PRs markdown : {x}");
 
-    // check for similar PRs
-    std::fs::write(
-        env::var("GITHUB_OUTPUT").unwrap(),
-        format!("similar_prs={similar_prs_str}"),
-    )
-    .unwrap();
-
-    std::fs::write(
+    set_output("similar_prs", &similar_prs_str);
+    set_output(
         "similar_prs_markdown",
-        serde_json::to_string(&similar_prs.to_html_table()).unwrap(),
-    )
-    .unwrap();
+        &serde_json::to_string(&similar_prs.to_html_table()).unwrap(),
+    );
 }
 
 fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {

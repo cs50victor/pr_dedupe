@@ -49,6 +49,9 @@ pub fn write_append<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io:
     }
     inner(path.as_ref(), contents.as_ref())
 }
+pub fn set_output(key: &str, value: &str) {
+    std::fs::write(env::var("GITHUB_OUTPUT").unwrap(), format!("{key}={value}")).unwrap();
+}
 
 #[cfg(test)]
 mod tests {
