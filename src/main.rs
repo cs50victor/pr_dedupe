@@ -4,12 +4,7 @@ mod supabase;
 mod upstash;
 mod utils;
 
-use std::{
-    env,
-    fs::File,
-    io::{self, Write},
-    path::Path,
-};
+use std::env;
 
 use clap::Parser;
 use futures::stream::StreamExt;
@@ -306,11 +301,4 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
         }
         None => format!("{symbol} : {path}\n"),
     }
-}
-
-pub fn write_append<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result<()> {
-    fn inner(path: &Path, contents: &[u8]) -> io::Result<()> {
-        File::options().append(true).open(path)?.write_all(contents)
-    }
-    inner(path.as_ref(), contents.as_ref())
 }
