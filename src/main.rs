@@ -15,7 +15,6 @@ use clap::Parser;
 use futures::stream::StreamExt;
 use log::info;
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use upstash::Upstash;
 
@@ -36,17 +35,17 @@ pub struct SimilarPRs {
 }
 
 impl SimilarPRs {
-    pub fn to_markdown(&self) -> String {
+    pub fn to_html_table(&self) -> String {
         match self.data.is_empty() {
             true => "".into(),
             false => {
                 #[allow(clippy::format_collect)]
-                let line = self
+                let table_content = self
                     .data
                     .iter()
                     .map(|f| {
                         format!(
-                            "|#{}|{}%|",
+                            "<tr><td>#{}</td><td>{}%</td></tr>",
                             &f.pr_url.split("pull").nth(1).unwrap()[1..],
                             f.percentage
                         )
@@ -59,7 +58,7 @@ impl SimilarPRs {
                 //     output
                 // })
 
-                format!("| PR | Similarity |\n| ---   | --- |\n{}", line)
+                format!("<table><tr><th>PR</th><th>Similarity</th></tr>{table_content}</table>")
             }
         }
     }
@@ -281,7 +280,7 @@ async fn main() {
     info!("Saved embedding");
 
     info!("Similar PRs string : {similar_prs_str:?}");
-    let x = &similar_prs.to_markdown();
+    let x = &similar_prs.to_html_table();
     info!("Similar PRs markdown : {x}");
 
     // check for similar PRs
@@ -291,9 +290,9 @@ async fn main() {
     )
     .unwrap();
 
-    multi_line_input(
+    std::fs::write(
         "similar_prs_markdown",
-        &serde_json::to_string(&similar_prs.to_markdown()).unwrap(),
+        serde_json::to_string(&similar_prs.to_html_table()).unwrap(),
     )
     .unwrap();
 }
@@ -307,18 +306,6 @@ fn parse(file_type: FileAction, path: &str, content: Option<&str>) -> String {
         }
         None => format!("{symbol} : {path}\n"),
     }
-}
-
-fn multi_line_input(key: &str, value: &str) -> Result<()> {
-    let delimiter = "EOF";
-
-    std::fs::write(env::var("GITHUB_OUTPUT")?, format!("{key}<<{delimiter}"))?;
-
-    write_append(env::var("GITHUB_OUTPUT")?, format!("{key}={value}"))?;
-
-    write_append(env::var("GITHUB_OUTPUT")?, delimiter)?;
-
-    Ok(())
 }
 
 pub fn write_append<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> io::Result<()> {
